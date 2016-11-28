@@ -1,0 +1,14 @@
+{
+	"ImportPath": "github.com/xsank/EasyProxy",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v74",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/tevino/tcp-shaker",
+			"Rev": "2d25c4a3e004e91481eb8fa060398929176ac69c"
+		}
+	]
+}

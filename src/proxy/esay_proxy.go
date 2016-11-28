@@ -1,17 +1,19 @@
 package proxy
 
 import (
-	"net"
-	"io"
-	"github.com/xsank/EasyProxy/src/proxy/schedule"
-	"time"
-	"log"
 	"github.com/xsank/EasyProxy/src/config"
+	"github.com/xsank/EasyProxy/src/health"
+	"github.com/xsank/EasyProxy/src/proxy/schedule"
 	"github.com/xsank/EasyProxy/src/structure"
+	"io"
+	"log"
+	"net"
+	"time"
 )
 
 const (
-	DefaultTimeoutTime = 3
+	DefaultTimeoutTime            = 3
+	DefaultHealthCheckTimeoutTime = 5
 )
 
 type EasyProxy struct {
@@ -40,14 +42,17 @@ func (proxy *EasyProxy) setStrategy(name string) {
 }
 
 func (proxy *EasyProxy) Check() {
+	tcpChecker := health.GetTCPChecker()
+	timeout := DefaultHealthCheckTimeoutTime * time.Second
 	for _, backend := range proxy.data.Backends {
-		_, err := net.Dial("tcp", backend.Url())
+		err := tcpChecker.Check(backend.Url(), timeout)
 		if err != nil {
 			proxy.Clean(backend.Url())
+			log.Printf("Health check failed, remove %s from backends.\n", backend.Url())
 		}
 	}
 	for _, deadend := range proxy.data.Deads {
-		_, err := net.Dial("tcp", deadend.Url())
+		err := tcpChecker.CheckAddr(deadend.Url(), timeout)
 		if err == nil {
 			proxy.Recover(deadend.Url())
 		}
@@ -78,7 +83,7 @@ func (proxy *EasyProxy) closeChannel(channel *structure.Channel, sync chan int) 
 }
 
 func (proxy *EasyProxy) transfer(local net.Conn, remote string) {
-	remoteConn, err := net.DialTimeout("tcp", remote, DefaultTimeoutTime * time.Second)
+	remoteConn, err := net.DialTimeout("tcp", remote, DefaultTimeoutTime*time.Second)
 	if err != nil {
 		proxy.Clean(remoteConn.RemoteAddr().String())
 		log.Println("connect error:%s", err)
@@ -87,7 +92,7 @@ func (proxy *EasyProxy) transfer(local net.Conn, remote string) {
 	localUrl := local.RemoteAddr().String()
 	remoteUrl := remoteConn.RemoteAddr().String()
 	sync := make(chan int, 1)
-	channel := structure.Channel{SrcUrl:localUrl, DstUrl:remoteUrl}
+	channel := structure.Channel{SrcUrl: localUrl, DstUrl: remoteUrl}
 	go proxy.putChannel(&channel)
 	go proxy.safeCopy(local, remoteConn, sync)
 	go proxy.safeCopy(remoteConn, local, sync)
